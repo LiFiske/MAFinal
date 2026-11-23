@@ -1,0 +1,19 @@
+# Course materials (copyrighted textbook content) — kept local, not published
+*.doc
+*.docx
+*.xlsx
+*.xlsm
+*.pptx
+*.potx
+*.pdf
+
+# Tooling / local config
+.claude/
+
+# OS cruft
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temp
+_preview_test.html
