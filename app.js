@@ -28,7 +28,18 @@
     solnPanel: $("solnPanel"), solnBody: $("solnBody"),
     gradeRight: $("gradeRight"), gradeWrong: $("gradeWrong"),
     prevBtn: $("prevBtn"), nextBtn: $("nextBtn"), shuffleBtn: $("shuffleBtn"),
-    scoreRight: $("scoreRight"), scoreWrong: $("scoreWrong"), resetScore: $("resetScore")
+    scoreRight: $("scoreRight"), scoreWrong: $("scoreWrong"), resetScore: $("resetScore"),
+    reportBtn: $("reportBtn"), reportModal: $("reportModal"), reportBody: $("reportBody"),
+    reportClose: $("reportClose"), reportBackdrop: $("reportBackdrop"), printReport: $("printReport")
+  };
+
+  var CHAPTER_NAMES = {
+    1: "Managerial Accounting Intro", 2: "Job-Order Costing", 3: "Process Costing",
+    4: "Cost-Volume-Profit", 5: "Variable Costing", 6: "Cost Allocation",
+    7: "Decision Making (Relevant Costs)", 8: "Pricing & Customer Profitability",
+    9: "Capital Budgeting", 10: "Budgetary Planning", 11: "Standard Costs & Variances",
+    12: "Decentralization (ROI/EVA)", 13: "Statement of Cash Flows",
+    14: "Financial Statement Analysis"
   };
 
   // ---- persistence (safe) ----
@@ -212,6 +223,128 @@
     render();
   }
 
+  // ---- cheat-sheet report ----
+  function questionLookup() {
+    var map = {};
+    (BANK.homework || []).concat(BANK.hard || []).forEach(function (q) { map[q.id] = q; });
+    return map;
+  }
+  function esc(s) {
+    return String(s).replace(/[&<>]/g, function (c) {
+      return c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;";
+    });
+  }
+  function renderReport() {
+    var lookup = questionLookup();
+    // total questions available per chapter
+    var totalByCh = {};
+    for (var id in lookup) { var c = lookup[id].chapter; totalByCh[c] = (totalByCh[c] || 0) + 1; }
+
+    // graded, grouped by chapter
+    var byCh = {}, totRight = 0, totWrong = 0;
+    for (var gid in state.graded) {
+      var q = lookup[gid]; if (!q) continue;
+      var ch = q.chapter;
+      byCh[ch] = byCh[ch] || { right: [], wrong: [] };
+      byCh[ch][state.graded[gid]].push(q);
+      if (state.graded[gid] === "right") totRight++; else totWrong++;
+    }
+    var graded = totRight + totWrong;
+
+    if (!graded) {
+      el.reportBody.innerHTML =
+        '<p class="rep-empty">No questions graded yet.<br>' +
+        'Reveal a solution, then tap <strong>Got it</strong> or <strong>Review again</strong>. ' +
+        'Once you\'ve marked a few, this report shows what to put on your cheat sheet.</p>';
+      return;
+    }
+
+    var html = "";
+    // summary tiles
+    var acc = Math.round((totRight / graded) * 100);
+    html += '<div class="rep-summary">' +
+      '<div class="rep-stat"><span class="num">' + graded + '</span><span class="lbl">Graded</span></div>' +
+      '<div class="rep-stat"><span class="num">' + totRight + '</span><span class="lbl">Got it</span></div>' +
+      '<div class="rep-stat"><span class="num">' + totWrong + '</span><span class="lbl">To review</span></div>' +
+      '<div class="rep-stat"><span class="num">' + acc + '%</span><span class="lbl">Accuracy</span></div>' +
+      '</div>';
+
+    // weaknesses: chapters with any "wrong", sorted by wrong desc, then accuracy asc
+    var weak = Object.keys(byCh).filter(function (c) { return byCh[c].wrong.length > 0; });
+    weak.sort(function (a, b) {
+      if (byCh[b].wrong.length !== byCh[a].wrong.length) return byCh[b].wrong.length - byCh[a].wrong.length;
+      var accA = byCh[a].right.length / (byCh[a].right.length + byCh[a].wrong.length);
+      var accB = byCh[b].right.length / (byCh[b].right.length + byCh[b].wrong.length);
+      return accA - accB;
+    });
+
+    html += '<div class="rep-section rep-weak"><h3>&#9888; Put these on your cheat sheet</h3>' +
+      '<p class="rep-hint">Topics you marked &ldquo;review again&rdquo; &mdash; your weak spots, ranked worst first.</p>';
+    if (!weak.length) {
+      html += '<p class="rep-hint">Nothing marked for review yet &mdash; nice.</p>';
+    }
+    weak.forEach(function (c) {
+      html += chapterBlock(c, byCh[c], totalByCh[c], true);
+    });
+    html += '</div>';
+
+    // strengths: chapters with right>0 and wrong==0
+    var strong = Object.keys(byCh).filter(function (c) {
+      return byCh[c].wrong.length === 0 && byCh[c].right.length > 0;
+    }).sort(function (a, b) { return a - b; });
+    if (strong.length) {
+      html += '<div class="rep-section rep-strong"><h3>&#10003; You can skip these</h3>' +
+        '<p class="rep-hint">All graded questions correct &mdash; don\'t waste cheat-sheet space here.</p>' +
+        '<div class="rep-chips">';
+      strong.forEach(function (c) {
+        html += '<span class="rep-chip">Ch ' + c + ' &middot; ' + esc(CHAPTER_NAMES[c] || "") +
+          ' (' + byCh[c].right.length + '/' + totalByCh[c] + ')</span>';
+      });
+      html += '</div></div>';
+    }
+
+    // not practiced: chapters with available questions but nothing graded
+    var todo = Object.keys(totalByCh).filter(function (c) { return !byCh[c]; })
+      .map(Number).sort(function (a, b) { return a - b; });
+    if (todo.length) {
+      html += '<div class="rep-section rep-todo"><h3>&#9675; Not practiced yet</h3>' +
+        '<p class="rep-hint">Grade some of these before trusting the report.</p><div class="rep-chips">';
+      todo.forEach(function (c) {
+        html += '<span class="rep-chip">Ch ' + c + ' &middot; ' + esc(CHAPTER_NAMES[c] || "") + '</span>';
+      });
+      html += '</div></div>';
+    }
+
+    html += '<p class="rep-note">Tip: a cheat sheet is best spent on formula-heavy, easy-to-forget ' +
+      'procedures &mdash; exactly the ones you keep missing above. What you already know, leave off.</p>';
+
+    el.reportBody.innerHTML = html;
+  }
+  function chapterBlock(c, g, total, showTopics) {
+    var done = g.right.length + g.wrong.length;
+    var accPct = Math.round((g.right.length / done) * 100);
+    var s = '<div class="rep-chapter"><div class="rep-chapter-top">' +
+      '<span class="rep-chapter-name">Ch ' + c + ' &middot; ' + esc(CHAPTER_NAMES[c] || "") + '</span>' +
+      '<span class="rep-chapter-meta">' + g.wrong.length + ' to review &middot; ' +
+      accPct + '% of ' + done + ' graded</span></div>';
+    var barColor = accPct >= 70 ? "var(--ok)" : accPct >= 40 ? "var(--spice)" : "var(--warn)";
+    s += '<div class="rep-bar"><span style="width:' + accPct + '%;background:' + barColor + '"></span></div>';
+    if (showTopics) {
+      // list the specific questions marked wrong (dedup by code)
+      var seen = {};
+      s += '<ul class="rep-topics">';
+      g.wrong.forEach(function (q) {
+        if (seen[q.code]) return; seen[q.code] = 1;
+        s += '<li><span class="code">' + esc(q.code) + '</span><span>' +
+          esc(q.topic || q.title) + '</span></li>';
+      });
+      s += '</ul>';
+    }
+    return s + '</div>';
+  }
+  function openReport() { renderReport(); el.reportModal.hidden = false; }
+  function closeReport() { el.reportModal.hidden = true; }
+
   // ---- segmented control wiring ----
   function wireSegmented(container, attr, onPick) {
     container.addEventListener("click", function (e) {
@@ -256,9 +389,17 @@
 
   el.resetScore.addEventListener("click", function () {
     state.graded = {}; saveGraded(); updateScore(); reflectGrade(null);
+    if (!el.reportModal.hidden) renderReport();
   });
 
+  el.reportBtn.addEventListener("click", openReport);
+  el.reportClose.addEventListener("click", closeReport);
+  el.reportBackdrop.addEventListener("click", closeReport);
+  el.printReport.addEventListener("click", function () { window.print(); });
+
   document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !el.reportModal.hidden) { closeReport(); return; }
+    if (!el.reportModal.hidden) return;                      // modal open: ignore nav keys
     if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return;
     if (e.key === "ArrowRight") go(1);
     else if (e.key === "ArrowLeft") go(-1);

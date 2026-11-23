@@ -57,6 +57,7 @@
           <span class="score-wrong" title="Marked for review">↻ <b id="scoreWrong">0</b></span>
           <button id="resetScore" class="link-btn" title="Reset tally">reset</button>
         </div>
+        <button id="reportBtn" class="report-btn">Cheat-Sheet Report</button>
       </div>
     </section>
 
@@ -111,6 +112,21 @@
 
     <p class="empty" id="empty" hidden>No questions for this difficulty and chapter yet.</p>
   </main>
+
+  <!-- CHEAT-SHEET REPORT MODAL -->
+  <div class="modal" id="reportModal" hidden>
+    <div class="modal-backdrop" id="reportBackdrop"></div>
+    <div class="modal-panel" role="dialog" aria-modal="true" aria-label="Cheat-sheet report">
+      <div class="modal-head">
+        <h2>Cheat-Sheet Builder</h2>
+        <div class="modal-head-actions">
+          <button id="printReport" class="btn" title="Print this report">Print</button>
+          <button id="reportClose" class="modal-x" aria-label="Close">&times;</button>
+        </div>
+      </div>
+      <div class="modal-body" id="reportBody"></div>
+    </div>
+  </div>
 
   <footer class="foot">
     <p>Use the ← and → arrow keys to move between questions.</p>
