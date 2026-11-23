@@ -20,6 +20,11 @@ Chapters: 1 Intro · 2 Job-Order Costing · 3 Process Costing · 4 CVP · 5 Vari
 | **Easy** | The homework question **+ a "Professor's Tip"** button that points you in the right direction | Excel homework, tips grounded in the lecture PowerPoints |
 | **Medium** | The same homework questions, **no tips** | Excel homework |
 | **Hard** | **New, invented problems** on the same lesson plan (different companies & numbers) with full solutions | Written to mirror the homework concepts |
+| **Concepts** | **Multiple-choice** questions that test *understanding* (what a ratio measures, when a variance is favorable, etc.) with instant right/wrong + an explanation | Written per chapter; auto-grades into the Cheat-Sheet Report |
+
+The **Cheat-Sheet Report** button turns your Got-it / Review-again marks (from every mode,
+including Concepts) into a strengths-and-weaknesses breakdown by chapter and topic — so you can
+decide what belongs on your one-page cheat sheet. It has a Print view.
 
 Every question has a **Reveal Solution** button with the full worked answer, optional
 **numeric self-check** fields (type a number → ✓ / ✗), and a **self-grade** tally

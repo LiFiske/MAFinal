@@ -4,15 +4,17 @@
 (function () {
   "use strict";
 
-  var BANK = window.QUESTION_BANK || { homework: [], hard: [] };
+  var BANK = window.QUESTION_BANK || { homework: [], hard: [], concepts: [] };
   var LS_GRADED = "spiceledger.graded.v1";
+  var LS_CHOSEN = "spiceledger.chosen.v1";
 
   var state = {
-    difficulty: "easy",     // easy | medium | hard
-    chapter: "all",         // all | 1 | 2
+    difficulty: "easy",     // easy | medium | hard | concepts
+    chapter: "all",         // all | 1 | 2 | ...
     index: 0,
     list: [],
-    graded: loadGraded()    // { questionId: "right" | "wrong" }
+    graded: loadGraded(),   // { questionId: "right" | "wrong" }
+    chosen: loadChosen()    // { conceptId: optionIndex } (for re-showing MC answers)
   };
 
   // ---- element refs ----
@@ -30,7 +32,9 @@
     prevBtn: $("prevBtn"), nextBtn: $("nextBtn"), shuffleBtn: $("shuffleBtn"),
     scoreRight: $("scoreRight"), scoreWrong: $("scoreWrong"), resetScore: $("resetScore"),
     reportBtn: $("reportBtn"), reportModal: $("reportModal"), reportBody: $("reportBody"),
-    reportClose: $("reportClose"), reportBackdrop: $("reportBackdrop"), printReport: $("printReport")
+    reportClose: $("reportClose"), reportBackdrop: $("reportBackdrop"), printReport: $("printReport"),
+    mcOptions: $("mcOptions"), mcExplain: $("mcExplain"), mcVerdict: $("mcVerdict"),
+    mcExplainBody: $("mcExplainBody"), actions: document.querySelector(".actions")
   };
 
   var CHAPTER_NAMES = {
@@ -51,14 +55,24 @@
     try { localStorage.setItem(LS_GRADED, JSON.stringify(state.graded)); }
     catch (e) { /* private mode / blocked — ignore */ }
   }
+  function loadChosen() {
+    try { return JSON.parse(localStorage.getItem(LS_CHOSEN)) || {}; }
+    catch (e) { return {}; }
+  }
+  function saveChosen() {
+    try { localStorage.setItem(LS_CHOSEN, JSON.stringify(state.chosen)); }
+    catch (e) { /* ignore */ }
+  }
 
   // ---- data ----
   function pool() {
-    return state.difficulty === "hard" ? (BANK.hard || []) : (BANK.homework || []);
+    if (state.difficulty === "concepts") return BANK.concepts || [];
+    if (state.difficulty === "hard") return BANK.hard || [];
+    return BANK.homework || [];
   }
   function allChapters() {
     var set = {};
-    (BANK.homework || []).concat(BANK.hard || []).forEach(function (q) { set[q.chapter] = true; });
+    (BANK.homework || []).concat(BANK.hard || [], BANK.concepts || []).forEach(function (q) { set[q.chapter] = true; });
     return Object.keys(set).map(Number).sort(function (a, b) { return a - b; });
   }
   function buildChapterButtons() {
@@ -96,27 +110,72 @@
     el.qTopic.textContent = q.topic || "";
     el.qCounter.textContent = (state.index + 1) + " / " + state.list.length;
     el.qTitle.textContent = q.title;
-    el.qPrompt.innerHTML = q.prompt;
 
-    // tip button — EASY only, and only if a tip exists
-    var showTip = state.difficulty === "easy" && q.tip;
-    el.tipBtn.hidden = !showTip;
-
-    // reset panels
-    el.tipPanel.hidden = true;
-    el.solnPanel.hidden = true;
-    el.tipBody.innerHTML = q.tip || "";
-    el.solnBody.innerHTML = q.solution || "";
-
-    // self-check
-    renderChecks(q);
-
-    // reflect prior grade on buttons
-    reflectGrade(q.id);
+    if (state.difficulty === "concepts") renderConcept(q);
+    else renderProblem(q);
 
     // scroll card into view on navigation (not first paint)
     if (render._painted) el.card.scrollIntoView({ behavior: "smooth", block: "start" });
     render._painted = true;
+  }
+
+  function renderProblem(q) {
+    el.qPrompt.innerHTML = q.prompt;
+    // concept UI off
+    el.mcOptions.hidden = true; el.mcOptions.innerHTML = "";
+    el.mcExplain.hidden = true;
+    // problem UI on
+    el.actions.hidden = false;
+    el.tipBtn.hidden = !(state.difficulty === "easy" && q.tip);
+    el.tipPanel.hidden = true;
+    el.solnPanel.hidden = true;
+    el.tipBody.innerHTML = q.tip || "";
+    el.solnBody.innerHTML = q.solution || "";
+    renderChecks(q);
+    reflectGrade(q.id);
+  }
+
+  function renderConcept(q) {
+    el.qPrompt.innerHTML = q.question;
+    // problem UI off
+    el.actions.hidden = true;
+    el.tipPanel.hidden = true;
+    el.solnPanel.hidden = true;
+    el.selfcheck.hidden = true;
+    // options
+    el.mcOptions.hidden = false;
+    el.mcOptions.innerHTML = "";
+    var answered = Object.prototype.hasOwnProperty.call(state.chosen, q.id);
+    (q.options || []).forEach(function (opt, i) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "mc-opt";
+      b.innerHTML = '<span class="mc-letter">' + "ABCDE".charAt(i) + "</span><span>" + opt.t + "</span>";
+      if (answered) {
+        b.disabled = true;
+        if (opt.c) b.classList.add("correct");
+        if (i === state.chosen[q.id] && !opt.c) b.classList.add("wrong");
+      } else {
+        b.addEventListener("click", function () { answerConcept(q, i); });
+      }
+      el.mcOptions.appendChild(b);
+    });
+    if (answered) showConceptExplain(q); else el.mcExplain.hidden = true;
+  }
+
+  function answerConcept(q, i) {
+    state.chosen[q.id] = i; saveChosen();
+    state.graded[q.id] = q.options[i].c ? "right" : "wrong"; saveGraded();
+    updateScore();
+    renderConcept(q); // lock + reveal
+  }
+
+  function showConceptExplain(q) {
+    var correct = state.graded[q.id] === "right";
+    el.mcExplain.hidden = false;
+    el.mcExplain.className = "panel mc-explain " + (correct ? "ok" : "no");
+    el.mcVerdict.textContent = correct ? "✓ Correct" : "✕ Not quite";
+    el.mcExplainBody.innerHTML = q.explanation || "";
   }
 
   function renderChecks(q) {
@@ -226,7 +285,7 @@
   // ---- cheat-sheet report ----
   function questionLookup() {
     var map = {};
-    (BANK.homework || []).concat(BANK.hard || []).forEach(function (q) { map[q.id] = q; });
+    (BANK.homework || []).concat(BANK.hard || [], BANK.concepts || []).forEach(function (q) { map[q.id] = q; });
     return map;
   }
   function esc(s) {
@@ -388,7 +447,9 @@
   el.shuffleBtn.addEventListener("click", shuffle);
 
   el.resetScore.addEventListener("click", function () {
-    state.graded = {}; saveGraded(); updateScore(); reflectGrade(null);
+    state.graded = {}; saveGraded();
+    state.chosen = {}; saveChosen();
+    updateScore(); render();
     if (!el.reportModal.hidden) renderReport();
   });
 
